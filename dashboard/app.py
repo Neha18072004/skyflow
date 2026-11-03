@@ -91,7 +91,12 @@ div[data-testid="stPlotlyChart"], div[data-testid="stDataFrame"] {{
 .sf-badge.warn {{ background: #FEF3DC; color: #9A6200; }}
 .sf-badge.fail {{ background: #F8E3E1; color: {RED}; }}
 .sf-badge.crit {{ background: {SLATE_200}; color: {SLATE_700}; }}
-table.sf-table {{ width: 100%; border-collapse: collapse; font-size: .88rem; margin: 0; display: table; border: none !important; }}
+.sf-table-wrap {{ overflow-x: auto; }}
+table.sf-table {{ width: 100% !important; table-layout: fixed; border-collapse: collapse; font-size: .88rem; margin: 0; display: table; border: none !important; }}
+table.sf-table tr {{ border: none !important; }}
+table.sf-table th, table.sf-table td {{ vertical-align: middle; }}
+table.sf-table .sf-badge, table.sf-table code {{ white-space: nowrap; }}
+table.sf-table .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
 table.sf-table th, table.sf-table td {{ border-left: none !important; border-right: none !important; border-top: none !important; }}
 table.sf-table th {{ text-align: left; color: {SLATE_500}; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; padding: .55rem .6rem; border-bottom: 1px solid {SLATE_200}; }}
 table.sf-table td {{ padding: .55rem .6rem; border-bottom: 1px solid #F1F5F9; color: {SLATE_700}; }}
@@ -479,7 +484,8 @@ with tab_health:
                      f'<div class="sf-kpi-value">{value}</div><span class="sf-delta flat">{note}</span></div>',
                      unsafe_allow_html=True)
 
-    left, right = st.columns([3, 2], gap="large")
+    # Full width, stacked: the 6-column DQ table needs the room (side by side it wrapped mid-word).
+    left, right = st.container(), st.container()
     with left:
         section(f"Data-quality checks ({dq['check_name'].nunique()})",
                 "Latest result per day. Critical checks fail the run; warnings quarantine individual rows.")
@@ -495,10 +501,14 @@ with tab_health:
             badge = f'<span class="sf-badge {kind}">{kind.upper()}</span>'
             rows.append(f"<tr><td>{badge}</td><td><code>{c.check_name}</code></td>"
                         f'<td><span class="sf-badge crit">{c.severity}</span></td><td>{c.stage}</td>'
-                        f"<td>{c.days - c.days_failed}/{c.days}</td><td>{c.failed_rows:,}</td></tr>")
+                        f'<td class="num">{c.days - c.days_failed}/{c.days}</td>'
+                        f'<td class="num">{c.failed_rows:,}</td></tr>')
+        # Fixed column widths keep the table inside its card at any screen width.
+        cols = "".join(f'<col style="width:{w}%">' for w in (11, 33, 14, 14, 14, 14))
         st.markdown(
-            '<div class="sf-card"><table class="sf-table"><thead><tr><th>Status</th><th>Check</th>'
-            "<th>Severity</th><th>Stage</th><th>Days passed</th><th>Rows flagged</th></tr></thead>"
+            f'<div class="sf-card sf-table-wrap"><table class="sf-table"><colgroup>{cols}</colgroup>'
+            "<thead><tr><th>Status</th><th>Check</th><th>Severity</th><th>Stage</th>"
+            '<th class="num">Days passed</th><th class="num">Rows flagged</th></tr></thead>'
             f"<tbody>{''.join(rows)}</tbody></table></div>",
             unsafe_allow_html=True,
         )
