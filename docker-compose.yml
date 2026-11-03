@@ -1,0 +1,131 @@
+# SkyFlow local stack: warehouse Postgres + Airflow (LocalExecutor) with its own metadata Postgres.
+# Trimmed from the official Airflow docker-compose: no Celery workers, Redis, triggerer or flower,
+# because a single LocalExecutor scheduler is plenty for one daily DAG on a laptop.
+
+x-airflow-common: &airflow-common
+  # The stock image already ships pandas, pyarrow, SQLAlchemy 1.4 and psycopg2 (and is
+  # multi-arch, so it runs natively on Apple Silicon) - no custom build needed.
+  image: apache/airflow:2.10.5-python3.11
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    # New DAGs start unpaused so `docker compose up` alone kicks off the catch-up runs.
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    # Max concurrent task instances across the whole scheduler (keeps RAM use laptop-friendly).
+    AIRFLOW__CORE__PARALLELISM: "4"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # Shared between webserver and scheduler so the UI can read task logs. Local-only value.
+    AIRFLOW__WEBSERVER__SECRET_KEY: skyflow-local-dev-only
+    # UI presentation (all built-in webserver settings).
+    AIRFLOW__WEBSERVER__INSTANCE_NAME: "SkyFlow · Flight Operations Pipeline"
+    AIRFLOW__WEBSERVER__NAVBAR_COLOR: "#0F1B3D"
+    AIRFLOW__WEBSERVER__NAVBAR_TEXT_COLOR: "#F1F5F9"
+    AIRFLOW__WEBSERVER__NAVBAR_HOVER_COLOR: "#1E3A5F"
+    AIRFLOW__WEBSERVER__NAVBAR_TEXT_HOVER_COLOR: "#FFFFFF"
+    # Local-only stack, so the "deployment may be exposed to the internet" banner is noise here.
+    AIRFLOW__WEBSERVER__WARN_DEPLOYMENT_EXPOSURE: "false"
+    # Pipeline code lives in src/ and is imported by the DAG; mounted so edits apply without a rebuild.
+    PYTHONPATH: /opt/airflow/src
+    SKYFLOW_DB_URL: postgresql+psycopg2://skyflow:skyflow@warehouse:5432/skyflow
+    SKYFLOW_DATA_DIR: /opt/airflow/data
+    SKYFLOW_SQL_DIR: /opt/airflow/sql
+    SKYFLOW_CATCHUP: ${SKYFLOW_CATCHUP:-true}
+    SKYFLOW_START_DATE: ${SKYFLOW_START_DATE:-2024-01-01}
+    SKYFLOW_END_DATE: ${SKYFLOW_END_DATE:-2024-03-31}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./sql:/opt/airflow/sql
+    - ./data:/opt/airflow/data
+    - ./logs:/opt/airflow/logs
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-depends
+    airflow-db:
+      condition: service_healthy
+    warehouse:
+      condition: service_healthy
+
+services:
+  # The analytics warehouse. Kept separate from Airflow's metadata DB so pipeline data and
+  # orchestrator state can be backed up, scaled or wiped independently.
+  warehouse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: skyflow
+      POSTGRES_PASSWORD: skyflow
+      POSTGRES_DB: skyflow
+    ports:
+      - "5442:5432"
+    volumes:
+      - warehouse-data:/var/lib/postgresql/data
+      # Runs once, on first start with an empty volume. `make reset-db` re-applies it.
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyflow -d skyflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: migrate the metadata DB and create the admin user, then exit.
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  warehouse-data:
+  airflow-db-data:

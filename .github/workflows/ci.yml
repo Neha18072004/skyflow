@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Real Postgres for the integration tests (idempotency, leakage). Same major version as
+      # the warehouse; tests create and reset their own `skyflow_test` database.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: skyflow
+          POSTGRES_PASSWORD: skyflow
+          POSTGRES_DB: skyflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skyflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SKYFLOW_TEST_DB_URL: postgresql+psycopg2://skyflow:skyflow@localhost:5432/skyflow_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -v
