@@ -41,7 +41,7 @@ keeps the cloud copy well inside Neon's free tier.
 
 ## Live dashboard
 
-**URL:** TODO
+**[skyflow-nehakk.streamlit.app](https://skyflow-nehakk.streamlit.app)**
 
 ![SkyFlow dashboard, Overview tab](docs/dashboard.png)
 
