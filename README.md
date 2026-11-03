@@ -1,5 +1,7 @@
 # SkyFlow — Flight Operations Data Pipeline
 
+[![CI](https://github.com/Neha18072004/skyflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Neha18072004/skyflow/actions/workflows/ci.yml)
+
 SkyFlow is an end-to-end batch ELT pipeline for airline operations data. It ingests US DOT/BTS
 on-time performance records (1.66M flights, Jan–Mar 2024) and validates each day with 16
 data-quality checks. It loads the data into a PostgreSQL star schema with idempotent per-day
@@ -189,6 +191,7 @@ docs/DESIGN.md               design decisions and trade-offs
 
 ## Data source and scope
 
-US Bureau of Transportation Statistics, *Reporting Carrier On-Time Performance* (public domain).
-No flight-level public dataset exists for Indian carriers. The pipeline doesn't depend on the
-source: adapting it means changing the column map in `config.py` and the extract step.
+**US BTS On-Time Performance, Jan–Mar 2024** (Bureau of Transportation Statistics, *Reporting
+Carrier On-Time Performance*, public domain). The pipeline doesn't depend on this source and
+could run on any airline's operational data: adapting it means changing the column map in
+`config.py` and the extract step.
