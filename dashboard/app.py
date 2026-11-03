@@ -123,16 +123,18 @@ def database_url() -> str:
     return url
 
 
+# Cached per URL: if the secret changes (e.g. it was missing on first boot), a new engine is
+# created instead of reusing one that points at the old target.
 @st.cache_resource
-def engine():
-    return create_engine(database_url(), pool_pre_ping=True)
+def engine(url: str):
+    return create_engine(url, pool_pre_ping=True)
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading flight operations data…")
-def load_marts() -> dict[str, pd.DataFrame]:
+def load_marts(url: str) -> dict[str, pd.DataFrame]:
     """Each mart is small (tens of thousands of rows), so load once and filter in memory: every
     filter change is then instant instead of a round trip to the cloud database."""
-    with engine().connect() as conn:
+    with engine(url).connect() as conn:
         marts = {
             name: pd.read_sql(f"SELECT * FROM marts.{name}", conn)
             for name in ["daily_ops", "delay_heatmap", "route_daily", "dq_summary", "pipeline_summary"]
@@ -143,7 +145,7 @@ def load_marts() -> dict[str, pd.DataFrame]:
 
 
 try:
-    data = load_marts()
+    data = load_marts(database_url())
 except Exception as exc:  # show a friendly card instead of a stack trace
     st.markdown(
         f'<div class="sf-card sf-empty"><h3>Can\'t reach the SkyFlow database</h3>'
