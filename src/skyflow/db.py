@@ -26,6 +26,22 @@ def apply_schema(engine: Engine | None = None) -> None:
             cur.execute(ddl)
 
 
+def run_script(engine: Engine, filename: str) -> None:
+    """Execute a multi-statement SQL file from sql/ with no parameters (idempotent DDL)."""
+    ddl = (config.SQL_DIR / filename).read_text()
+    with engine.begin() as conn:
+        with conn.connection.cursor() as cur:
+            cur.execute(ddl)
+
+
+def sql_statements(filename: str) -> list[str]:
+    """Split a SQL file into statements for parameterised execution. Comment lines are dropped
+    first so a comment can't hide a statement boundary."""
+    sql = (config.SQL_DIR / filename).read_text()
+    body = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    return [s.strip() for s in body.split(";") if s.strip()]
+
+
 def scalar(sql: str, engine: Engine | None = None, **params):
     engine = engine or get_engine()
     with engine.connect() as conn:

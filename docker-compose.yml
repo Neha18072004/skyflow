@@ -30,6 +30,8 @@ x-airflow-common: &airflow-common
     SKYFLOW_DB_URL: postgresql+psycopg2://skyflow:skyflow@warehouse:5432/skyflow
     SKYFLOW_DATA_DIR: /opt/airflow/data
     SKYFLOW_SQL_DIR: /opt/airflow/sql
+    # Optional cloud target for the publish_marts task; read from the gitignored .env file.
+    CLOUD_DATABASE_URL: ${CLOUD_DATABASE_URL:-}
     SKYFLOW_CATCHUP: ${SKYFLOW_CATCHUP:-true}
     SKYFLOW_START_DATE: ${SKYFLOW_START_DATE:-2024-01-01}
     SKYFLOW_END_DATE: ${SKYFLOW_END_DATE:-2024-03-31}

@@ -20,3 +20,5 @@ select = ["F", "E", "W", "I", "B", "UP"]
 [tool.ruff.lint.per-file-ignores]
 # Airflow injects context values (ds, run_id) into TaskFlow params whose default is None.
 "dags/*" = ["RUF013"]
+# Inline CSS/HTML template strings read better unwrapped.
+"dashboard/*" = ["E501"]

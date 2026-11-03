@@ -1,4 +1,4 @@
-.PHONY: setup data up down reset-db logs lint test run-day baseline
+.PHONY: setup data up down reset-db logs lint test run-day baseline publish dashboard
 
 PY := .venv/bin/python
 WAREHOUSE := docker compose exec -T warehouse psql -U skyflow -d skyflow
@@ -33,3 +33,9 @@ run-day:          ## run one day outside Airflow: make run-day DATE=2024-01-01
 
 baseline:         ## train the quick delay-prediction baseline on the feature table
 	PYTHONPATH=src $(PY) scripts/train_baseline.py
+
+publish:          ## rebuild dashboard marts; copy to cloud if CLOUD_DATABASE_URL is in .env
+	set -a; [ -f .env ] && . ./.env; set +a; PYTHONPATH=src $(PY) -m skyflow.publish
+
+dashboard:        ## run the Streamlit dashboard locally (reads DASHBOARD_DB_URL or the local warehouse)
+	.venv/bin/streamlit run dashboard/app.py

@@ -1,0 +1,20 @@
+# SkyFlow dashboard theme. A fixed light theme so the designed palette (navy header, off-white
+# surfaces, amber accent) looks the same whatever the viewer's OS dark-mode setting is.
+[theme]
+base = "light"
+primaryColor = "#F5A524"
+backgroundColor = "#F7F8FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1E293B"
+font = "sans serif"
+
+[client]
+# Hides the developer menu (rerun/settings/deploy) for viewers; supported config, not a CSS hack.
+toolbarMode = "minimal"
+showSidebarNavigation = false
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

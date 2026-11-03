@@ -37,6 +37,7 @@ STAGE_COLORS = {
     "loading": ("#0F766E", "#FFFFFF"),         # teal
     "ml": ("#5B4B8A", "#FFFFFF"),              # violet
     "reporting": ("#B45309", "#FFFFFF"),       # amber
+    "publishing": ("#0F1B3D", "#F5A524"),      # brand navy with amber text
 }
 
 
@@ -134,6 +135,20 @@ def skyflow_pipeline():
         from skyflow.pipeline import run_dq_report
         run_dq_report(date.fromisoformat(ds), run_id)
 
+    @task(
+        task_display_name="Publish dashboard marts",
+        doc_md="Rebuilds the marts.* aggregates and copies them to the cloud Postgres "
+               "(skipped when CLOUD_DATABASE_URL isn't set).",
+    )
+    def publish_marts() -> None:
+        from airflow.exceptions import AirflowSkipException
+
+        # Skip, not fail: CI and other people's local runs have no cloud target, and that's fine.
+        if not os.getenv("CLOUD_DATABASE_URL"):
+            raise AirflowSkipException("CLOUD_DATABASE_URL not set; nothing to publish")
+        from skyflow.publish import publish
+        publish()
+
     (
         styled(extract(), "ingestion")
         >> styled(validate(), "ingestion")
@@ -142,6 +157,7 @@ def skyflow_pipeline():
         >> styled(load_facts(), "loading")
         >> styled(build_features(), "ml")
         >> styled(dq_report(), "reporting")
+        >> styled(publish_marts(), "publishing")
     )
 
 

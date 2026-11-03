@@ -24,6 +24,9 @@ flowchart LR
     G -->|build_features: SQL| H[(features_flight_delay)]
     G & H -->|dq_report: reconcile| Q[(dq_results)]
     C --> Q
+    G & Q -->|publish_marts: aggregate| M[(marts.* 33 MB)]
+    M -->|COPY, one transaction| N[(Neon Postgres)]
+    N --> S[Streamlit dashboard]
     subgraph Airflow LocalExecutor - one DAG run per flight date
       B
       C
@@ -33,6 +36,32 @@ flowchart LR
 ```
 
 Two Postgres 16 instances: **warehouse** (`localhost:5442`) and **Airflow metadata** (internal).
+Only the small pre-aggregated marts go to the cloud. The 414 MB fact table stays local, which
+keeps the cloud copy well inside Neon's free tier.
+
+## Live dashboard
+
+**URL:** TODO
+
+![SkyFlow dashboard, Overview tab](docs/dashboard.png)
+
+A Streamlit dashboard reading only the `marts.*` tables in Neon. It has four tabs: Overview
+(KPIs vs the previous period, daily on-time trend, delay causes), Airlines & Routes (league
+table, most-delayed routes), Delay Patterns (hour × weekday heatmap) and Pipeline Health (run
+summary and the 16 DQ checks). Filters are date range, airline and origin airport.
+
+| Mart | Rows | Size | Grain |
+|---|---|---|---|
+| `marts.daily_ops` | 127,213 | 16 MB | date × airline × origin |
+| `marts.delay_heatmap` | 81,230 | 7.4 MB | airline × origin × weekday × hour |
+| `marts.route_daily` | 91,803 | 9 MB | date × airline × route (300 busiest routes) |
+| `marts.dq_summary` | 1,456 | 0.4 MB | date × check (latest result) |
+| `marts.pipeline_summary` | 1 | — | headline run numbers |
+
+```bash
+make publish      # rebuild marts locally; copy to Neon if CLOUD_DATABASE_URL is in .env
+make dashboard    # run the dashboard locally (falls back to the local warehouse)
+```
 
 ## Quickstart
 
@@ -61,9 +90,15 @@ PYTHONPATH=src .venv/bin/python scripts/train_baseline.py               # baseli
 
 ## DAG
 
-`extract → validate → transform → load_dimensions → load_facts → build_features → dq_report`
+`extract → validate → transform → load_dimensions → load_facts → build_features → dq_report → publish_marts`
 
-![DAG graph view](docs/dag.png) <!-- TODO: screenshot from http://localhost:8080 -->
+![DAG graph view](docs/dag.png)
+
+![91-day backfill, all runs successful](docs/dag_runs.png)
+*91-day backfill, all runs successful*
+
+`publish_marts` was added after the backfill. It is skipped when `CLOUD_DATABASE_URL` isn't
+set, so CI and other people's local runs still work.
 
 - Daily schedule. Each run processes the flights of its logical date, so re-runs and backfills
   are the same operation.
@@ -184,6 +219,10 @@ src/skyflow/                 extract, validate, transform, load, features, pipel
 sql/schema.sql               star schema + dq_results + feature table DDL
 sql/features.sql             per-day feature build (leakage-safe windows)
 sql/run_metrics.sql          numbers for the Results table
+sql/marts_schema.sql, marts.sql   dashboard marts (DDL + full refresh)
+src/skyflow/publish.py       build marts, copy them to the cloud Postgres
+dashboard/app.py             Streamlit dashboard (reads marts only)
+.github/workflows/           ci.yml (lint + tests), publish.yml (manual full rebuild + publish)
 scripts/                     data download, baseline model
 tests/                       unit (validate, transform) + integration (idempotency, leakage)
 docs/DESIGN.md               design decisions and trade-offs
